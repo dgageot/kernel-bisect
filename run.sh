@@ -3,27 +3,23 @@
 export CLOUDSDK_CORE_PROJECT='code-story-blog'
 export CLOUDSDK_COMPUTE_ZONE='europe-west1-d'
 
-TARBAL='/Users/dgageot/go/src/github.com/docker/moby/alpine/gce.img.tar.gz'
 BUCKET='docker-image'
-TAG="${TAG:-latest}"
-
-echo Upload tarball
-gsutil cp -a public-read "${TARBAL}" "gs://${BUCKET}/${TAG}/moby.img.tar.gz"
+COMMIT="${COMMIT:-latest}"
 
 echo Create GCE image
-gcloud compute images delete -q "moby-${TAG}" | true
-gcloud compute images create --source-uri "https://storage.googleapis.com/${BUCKET}/${TAG}/moby.img.tar.gz" "moby-${TAG}"
+gcloud compute images create --source-uri "https://storage.googleapis.com/${BUCKET}/${COMMIT}/moby.img.tar.gz" "moby-${COMMIT}"
 
 echo Create nodes
-gcloud compute instances delete -q "manager-${TAG}" "worker-${TAG}" | true
-gcloud compute instances create "manager-${TAG}" --image="moby-${TAG}" --machine-type="g1-small" --boot-disk-size=200 --metadata serial-port-enable=true --metadata-from-file startup-script=script-manager.sh
-gcloud compute instances create "worker-${TAG}" --image="moby-${TAG}" --machine-type="g1-small" --boot-disk-size=200 --metadata serial-port-enable=true --metadata-from-file startup-script=script-worker.sh
+gcloud compute instances create "manager-${COMMIT}" --image="moby-${COMMIT}" --machine-type="g1-small" --boot-disk-size=200 --metadata serial-port-enable=true --metadata-from-file startup-script=script-manager.sh
+gcloud compute instances create "worker-${COMMIT}" --image="moby-${COMMIT}" --machine-type="g1-small" --boot-disk-size=200 --metadata serial-port-enable=true --metadata-from-file startup-script=script-worker.sh
+
+# TODO: create in //
 
 echo Wait for the Swarm
-MANAGER_IP=$(gcloud compute instances describe "manager-${TAG}" --format=json | jq -r '.networkInterfaces[0].accessConfigs[0].natIP')
+MANAGER_IP=$(gcloud compute instances describe "manager-${COMMIT}" --format=json | jq -r '.networkInterfaces[0].accessConfigs[0].natIP')
 echo $MANAGER_IP
 
-for i in $(seq 1 10); do
+for i in $(seq 1 30); do
   READY=$(curl -s $MANAGER_IP:8080)
   if [ $(echo ${READY} | grep -c Welcome) -eq 1 ]; then
     echo "Ready to test"
@@ -36,7 +32,7 @@ for i in $(seq 1 10); do
 done
 
 echo Test Routing Mesh
-for i in $(seq 1 4); do
+for i in $(seq 1 20); do
   curl -s --connect-timeout 10 $MANAGER_IP:5000
   if [ $? -ne 0 ]; then
     echo "FAILURE"
